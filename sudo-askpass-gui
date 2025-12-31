@@ -1,0 +1,25 @@
+#!/bin/bash
+# AI Sudo Guard - GUI Password Prompt
+# Used by sudo -A to get password via GUI dialog
+
+# Try zenity (GNOME/GTK)
+if command -v zenity &> /dev/null; then
+    zenity --password --title="AI Sudo Guard - Password Required" 2>/dev/null
+    exit $?
+fi
+
+# Try kdialog (KDE/Qt)
+if command -v kdialog &> /dev/null; then
+    kdialog --password "AI Sudo Guard - Password Required" 2>/dev/null
+    exit $?
+fi
+
+# Try ssh-askpass as fallback
+if command -v ssh-askpass &> /dev/null; then
+    ssh-askpass "Sudo Password:"
+    exit $?
+fi
+
+# No GUI available - fail
+echo "Error: No GUI password dialog available (install zenity or kdialog)" >&2
+exit 1

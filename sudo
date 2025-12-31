@@ -1,0 +1,100 @@
+#!/bin/bash
+# AI Sudo Guard - Sudo Approval System
+# Intercepts sudo commands from AI assistants and requires manual approval via GUI dialog
+# Prevents accidental system damage from AI coding assistants (Claude, Gemini, Copilot, etc.)
+
+# Configuration
+REAL_SUDO="/usr/bin/sudo"
+LOG_FILE="$HOME/.ai_sudo_requests.log"
+TIMEOUT=30  # Dialog timeout in seconds
+
+# Colors for terminal output
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Log sudo request
+log_request() {
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local cmd="$*"
+    local status="$1"
+    shift
+
+    echo "[$timestamp] Status: $status | User: $USER | PID: $PPID | Command: $cmd" >> "$LOG_FILE"
+}
+
+# Show GUI approval dialog
+show_approval_dialog() {
+    local cmd="$*"
+
+    # Try zenity (GNOME) first
+    if command -v zenity &> /dev/null; then
+        zenity --question \
+            --title="AI Sudo Guard - Approval Required" \
+            --text="<b>An AI assistant is requesting sudo privileges:</b>\n\n<tt>sudo $cmd</tt>\n\n<b>Do you approve this command?</b>\n\nReview carefully before approving. If approved, you will be prompted for your password." \
+            --width=600 \
+            --timeout=$TIMEOUT \
+            2>/dev/null
+        return $?
+    fi
+
+    # Try kdialog (KDE)
+    if command -v kdialog &> /dev/null; then
+        kdialog --title "AI Sudo Guard - Approval Required" \
+            --yesno "An AI assistant is requesting sudo privileges:\n\nsudo $cmd\n\nDo you approve this command?\n\nReview carefully before approving. If approved, you will be prompted for your password." \
+            2>/dev/null
+        return $?
+    fi
+
+    # Fallback to terminal prompt
+    echo -e "${YELLOW}+------------------------------------------------------------------+${NC}"
+    echo -e "${YELLOW}|${NC}  ${RED}AI SUDO GUARD - APPROVAL REQUIRED${NC}                            ${YELLOW}|${NC}"
+    echo -e "${YELLOW}+------------------------------------------------------------------+${NC}"
+    echo ""
+    echo -e "${BLUE}An AI assistant is requesting sudo privileges:${NC}"
+    echo -e "${GREEN}sudo $cmd${NC}"
+    echo ""
+    echo -e "${YELLOW}Review carefully before approving.${NC}"
+    echo -e "${YELLOW}If approved, you will be prompted for your password.${NC}"
+    echo ""
+    read -p "Do you approve this command? [y/N]: " -t $TIMEOUT response
+
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Main logic
+main() {
+
+    # No token - request approval
+    local full_command="$@"
+
+    # Show approval dialog
+    if show_approval_dialog "$full_command"; then
+        # Approved - now execute with GUI password prompt
+        log_request "APPROVED_EXECUTING" "$@"
+
+        echo -e "${GREEN}Sudo request approved. Prompting for password...${NC}"
+
+        # Set up GUI password helper - update this path after installation
+        export SUDO_ASKPASS="${SUDO_ASKPASS:-$HOME/.local/bin/sudo-askpass-gui}"
+
+        # Execute with real sudo using GUI password prompt
+        exec "$REAL_SUDO" -A "$@"
+    else
+        # Denied or timeout
+        log_request "DENIED" "$@"
+
+        echo -e "${RED}Sudo request denied or timed out${NC}" >&2
+        echo -e "${YELLOW}Command was: sudo $full_command${NC}" >&2
+        exit 1
+    fi
+}
+
+# Run main logic
+main "$@"
