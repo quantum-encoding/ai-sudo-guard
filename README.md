@@ -56,7 +56,7 @@ Integrity: OK
 ## Installation
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/ai-sudo-guard.git
+git clone https://github.com/quantum-encoding/ai-sudo-guard.git
 cd ai-sudo-guard
 ./install.sh
 ```
